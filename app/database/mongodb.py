@@ -35,6 +35,7 @@ from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.errors import ConnectionFailure, OperationFailure, ServerSelectionTimeoutError
 
 from app.config import settings
+from app.core.exceptions import DatabaseError
 
 logger = logging.getLogger(__name__)
 
@@ -246,13 +247,14 @@ async def close_mongo_connection() -> None:
 def get_database() -> AsyncIOMotorDatabase:
     """
     Return the active database handle.
-    Raises RuntimeError if called before connect_to_mongo().
+    Raises DatabaseError if the database is unavailable.
     """
     db = _db_state.get("db")
     if db is None:
-        raise RuntimeError(
-            "Database is not initialised. "
-            "Ensure connect_to_mongo() ran at application startup."
+        raise DatabaseError(
+            message="Database is unavailable. Please try again later.",
+            error_code="DATABASE_UNAVAILABLE",
+            details={"service": "mongodb"},
         )
     return db
 

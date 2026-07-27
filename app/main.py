@@ -56,11 +56,20 @@ async def lifespan(app: FastAPI):
         "Starting %s v%s [%s]",
         settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV,
     )
-    await connect_to_mongo()
-    logger.info("Application startup complete.")
+
+    try:
+        await connect_to_mongo()
+        logger.info("Application startup complete.")
+    except Exception as exc:  # pragma: no cover - defensive startup path
+        logger.warning("Application started without a reachable database: %s", exc)
+
     yield
+
     logger.info("Shutting down…")
-    await close_mongo_connection()
+    try:
+        await close_mongo_connection()
+    except Exception as exc:  # pragma: no cover - defensive shutdown path
+        logger.warning("MongoDB shutdown cleanup failed: %s", exc)
     logger.info("Shutdown complete.")
 
 

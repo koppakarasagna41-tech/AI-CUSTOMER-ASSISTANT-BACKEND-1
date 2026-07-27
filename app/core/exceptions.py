@@ -65,8 +65,8 @@ class ValidationError(AppException):
 
 
 class DatabaseError(AppException):
-    """MongoDB operation failed (500)."""
-    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    """MongoDB operation failed (503 service unavailable)."""
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 class UnauthorizedError(AppException):
@@ -98,8 +98,9 @@ async def _app_exception_handler(request: Request, exc: AppException) -> JSONRes
         exc.message,
         request.url.path,
     )
+    status_code = getattr(exc, "status_code", status.HTTP_500_INTERNAL_SERVER_ERROR)
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=status_code,
         content=error_response(
             message=exc.message,
             error_code=exc.error_code,

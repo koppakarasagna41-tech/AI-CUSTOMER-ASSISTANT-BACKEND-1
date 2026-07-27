@@ -27,12 +27,18 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(plain: str) -> str:
     """Return a bcrypt hash of the plain-text password."""
-    return _pwd_context.hash(plain)
+    normalized = plain.strip()
+    if len(normalized.encode("utf-8")) > 72:
+        normalized = normalized[:72]
+    return _pwd_context.hash(normalized)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if plain matches the stored hash."""
-    return _pwd_context.verify(plain, hashed)
+    normalized = plain.strip()
+    if len(normalized.encode("utf-8")) > 72:
+        normalized = normalized[:72]
+    return _pwd_context.verify(normalized, hashed)
 
 
 # ── JWT ───────────────────────────────────────────────────────
