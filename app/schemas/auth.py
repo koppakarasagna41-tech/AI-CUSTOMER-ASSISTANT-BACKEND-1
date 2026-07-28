@@ -32,6 +32,16 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., description="Valid JWT refresh token")
 
 
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 # ── Response bodies ───────────────────────────────────────────
 
 class UserOut(BaseModel):

@@ -24,14 +24,17 @@ from app.core.security     import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    hash_password,
 )
-from app.database          import UsersCollection
+from app.database          import UsersCollection, get_document, get_document_by_id, update_document_by_id
 from app.schemas.auth      import (
     AuthResponse,
+    ChangePasswordRequest,
     LoginRequest,
     RefreshTokenRequest,
     RegisterRequest,
     TokenPair,
+    UpdateProfileRequest,
     UserOut,
 )
 from app.services.user_service import (
@@ -252,3 +255,64 @@ async def get_me(
         data=_user_out(current_user).model_dump(),
         message="User profile retrieved.",
     )
+
+
+@router.patch(
+    "/me",
+    summary="Update current user profile",
+    response_description="Updated authenticated user profile",
+)
+async def update_me(
+    payload: UpdateProfileRequest,
+    current_user: dict = Depends(get_current_user),
+    col: AsyncIOMotorCollection = Depends(UsersCollection),
+):
+    updates: dict = {}
+    if payload.full_name is not None:
+        updates["full_name"] = payload.full_name.strip()
+    if payload.email is not None:
+        normalized_email = payload.email.lower().strip()
+        existing = await get_document(col, {"email": normalized_email})
+        if existing and existing.get("_id") != current_user.get("_id"):
+            raise BadRequestError(
+                message="An account with this email already exists.",
+                error_code="EMAIL_TAKEN",
+            )
+        updates["email"] = normalized_email
+
+    if not updates:
+        raise BadRequestError(message="No profile fields were provided.", error_code="NO_UPDATES")
+
+    updates["updated_at"] = utc_now()
+    await update_document_by_id(col, current_user.get("_id"), {"$set": updates})
+
+    refreshed = await get_document_by_id(col, current_user.get("_id"))
+    return success_response(
+        data=_user_out(refreshed).model_dump(),
+        message="Profile updated successfully.",
+    )
+
+
+@router.post(
+    "/change-password",
+    summary="Change the current user's password",
+)
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: dict = Depends(get_current_user),
+    col: AsyncIOMotorCollection = Depends(UsersCollection),
+):
+    user_doc = await get_document_by_id(col, current_user.get("_id"))
+    if not user_doc:
+        raise BadRequestError(message="User not found.", error_code="USER_NOT_FOUND")
+
+    if not verify_password(payload.current_password, user_doc.get("password_hash", "") or ""):
+        raise BadRequestError(message="Current password is incorrect.", error_code="INVALID_PASSWORD")
+
+    await update_document_by_id(
+        col,
+        current_user.get("_id"),
+        {"$set": {"password_hash": hash_password(payload.new_password), "updated_at": utc_now()}},
+    )
+
+    return success_response(message="Password changed successfully.")
