@@ -37,6 +37,16 @@ class Settings(BaseSettings):
             self.MONGODB_DB_NAME = self.DATABASE_NAME
         return self
 
+    @model_validator(mode="after")
+    def _validate_runtime_security(self) -> "Settings":
+        if self.APP_ENV == "production":
+            placeholder_secret = "change-me-to-a-long-random-secret-key-min-32"
+            if not self.SECRET_KEY or self.SECRET_KEY.strip() == placeholder_secret:
+                raise ValueError("SECRET_KEY must be set to a strong random value in production")
+            if not self.GEMINI_API_KEY or self.GEMINI_API_KEY.startswith("your-"):
+                raise ValueError("GEMINI_API_KEY must be configured in production")
+        return self
+
     # ── CORS ──────────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
