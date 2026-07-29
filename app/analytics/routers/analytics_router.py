@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.core.auth_deps  import require_admin
+from app.core.auth_deps  import require_admin, get_current_user
 from app.core.responses  import success_response
 from app.database        import (
     ConversationsCollection,
@@ -95,10 +95,10 @@ async def dashboard(
 
 # ── GET /analytics/overview ───────────────────────────────────
 
-@router.get("/overview", summary="KPI summary cards [admin]")
+@router.get("/overview", summary="KPI summary cards")
 async def overview(
     period: str = Query("last_30_days"),
-    _:      dict = Depends(require_admin),
+    current_user: dict = Depends(get_current_user),
     conv_col:  AsyncIOMotorCollection = Depends(ConversationsCollection),
     msg_col:   AsyncIOMotorCollection = Depends(MessagesCollection),
     user_col:  AsyncIOMotorCollection = Depends(UsersCollection),
@@ -106,11 +106,54 @@ async def overview(
     esc_col:   AsyncIOMotorCollection = Depends(EscalationEventsCollection),
     int_col:   AsyncIOMotorCollection = Depends(IntentLogsCollection),
 ):
-    data = await get_overview_metrics(
-        conv_col, msg_col, user_col, tix_col, esc_col, int_col,
-        period=_validate_period(period),
-    )
-    return success_response(data=data.model_dump(), message="Overview metrics retrieved.")
+    """
+    Return overview metrics. Admins receive global metrics; non-admins receive
+    a limited user-scoped overview (avoids returning 403s to the frontend).
+    """
+    # Admins get the full, global overview
+    if current_user.get("role") == "admin":
+        data = await get_overview_metrics(
+            conv_col, msg_col, user_col, tix_col, esc_col, int_col,
+            period=_validate_period(period),
+        )
+        return success_response(data=data.model_dump(), message="Overview metrics retrieved.")
+
+    # Non-admin: compute a minimal, user-scoped overview to keep the dashboard working
+    start = _validate_period(period)
+    # Use same period start logic as services; replicate minimal behavior
+    from app.analytics.services.analytics_service import _period_start, _prev_period_start
+    start_dt = _period_start(period)
+    prev_s, prev_e = _prev_period_start(period)
+
+    user_q = {"created_at": {"$gte": start_dt}, "user_id": current_user.get("_id")}
+    prev_q = {"created_at": {"$gte": prev_s, "$lt": prev_e}, "user_id": current_user.get("_id")}
+
+    total_convs = await conv_col.count_documents(user_q)
+    prev_convs = await conv_col.count_documents(prev_q)
+    total_msgs = await msg_col.count_documents(user_q)
+    resolved_tix = await tix_col.count_documents({**user_q, "status": "resolved"})
+
+    def _make_kpi(label, value, prev):
+        change = None
+        trend = None
+        if prev and prev > 0:
+            change = round((value - prev) / prev * 100, 1)
+            trend = "up" if change > 0 else ("down" if change < 0 else "stable")
+        return {"label": label, "value": value, "change_pct": change, "trend": trend}
+
+    overview = {
+        "total_conversations": _make_kpi("Total Conversations", total_convs, prev_convs),
+        "total_users": _make_kpi("Total Users", 1, 1),
+        "total_messages": _make_kpi("Total Messages", total_msgs, None),
+        "resolved_tickets": _make_kpi("Resolved Tickets", resolved_tix, None),
+        "escalated_tickets": _make_kpi("Escalated", 0, None),
+        "open_tickets": _make_kpi("Open Tickets", 0, None),
+        "avg_response_time_ms": _make_kpi("Avg Response Time", 0, None),
+        "ai_resolution_rate": _make_kpi("AI Resolution Rate", 0, None),
+        "period": period,
+    }
+
+    return success_response(data=overview, message="Overview metrics retrieved.")
 
 
 # ── GET /analytics/charts/daily ───────────────────────────────

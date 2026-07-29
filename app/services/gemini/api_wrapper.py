@@ -238,7 +238,7 @@ async def generate_content_async(
             extra={"component": "gemini", "event": "request_failed", "model": model_name, "error": str(exc)},
         )
         raise GeminiError(
-            message=f"Gemini API error: {exc.message}",
+            message=f"Gemini API error: {str(exc)}",
             error_code="GEMINI_API_ERROR",
             retryable=False,
         )
