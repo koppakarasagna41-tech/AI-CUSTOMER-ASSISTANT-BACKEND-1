@@ -14,6 +14,7 @@ from .base import MongoBaseModel, TimestampMixin
 
 class UserRole(str, Enum):
     ADMIN    = "admin"
+    AGENT    = "agent"
     CUSTOMER = "customer"
 
 

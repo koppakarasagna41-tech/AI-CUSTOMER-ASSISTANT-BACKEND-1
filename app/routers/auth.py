@@ -27,6 +27,7 @@ from app.core.security     import (
     hash_password,
 )
 from app.database          import UsersCollection, get_document, get_document_by_id, update_document_by_id
+from app.models.user       import UserRole
 from app.schemas.auth      import (
     AuthResponse,
     ChangePasswordRequest,
@@ -94,12 +95,19 @@ async def register(
     - Hashes the password with bcrypt.
     - Returns an access token + refresh token immediately (no separate login needed).
     """
+    requested_role = payload.role or UserRole.CUSTOMER
+    if requested_role == UserRole.ADMIN:
+        raise BadRequestError(
+            message="Admin role may not be assigned during registration.",
+            error_code="INVALID_ROLE",
+        )
+
     user = await create_user(
         col=col,
         full_name=payload.full_name,
         email=payload.email,
         password=payload.password,
-        role=payload.role.value,
+        role=requested_role.value,
     )
 
     tokens = _build_token_pair(user_id=user["_id"], role=user["role"])

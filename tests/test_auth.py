@@ -29,7 +29,6 @@ async def test_register_creates_user_and_returns_tokens(client, monkeypatch, cur
             "full_name": "Jane Doe",
             "email": "jane@example.com",
             "password": "SecurePass123",
-            "role": "customer",
         },
     )
 
@@ -38,6 +37,103 @@ async def test_register_creates_user_and_returns_tokens(client, monkeypatch, cur
     assert body["success"] is True
     assert body["data"]["user"]["email"] == "jane@example.com"
     assert body["data"]["tokens"]["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_register_allows_demo_agent_role(client, monkeypatch, current_user_payload):
+    created_user = {
+        **current_user_payload,
+        "_id": "user-456",
+        "role": "agent",
+        "password_hash": "hashed",
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+
+    async def fake_create_user(*args, **kwargs):
+        assert kwargs["role"] == "agent"
+        return created_user
+
+    async def fake_get_user_by_email(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.routers.auth.create_user", fake_create_user)
+    monkeypatch.setattr("app.routers.auth.get_user_by_email", fake_get_user_by_email)
+
+    client.app.dependency_overrides[get_current_user] = lambda: current_user_payload
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "password": "SecurePass123",
+            "role": "agent",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["user"]["role"] == "agent"
+    assert body["data"]["tokens"]["access_token"]
+
+
+def test_register_rejects_admin_role(client):
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "password": "SecurePass123",
+            "role": "admin",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["success"] is False
+    assert response.json()["error_code"] == "INVALID_ROLE"
+
+
+@pytest.mark.asyncio
+async def test_create_user_promotes_first_user_to_admin(monkeypatch):
+    async def fake_document_exists(*args, **kwargs):
+        return False
+
+    async def fake_count_documents(*args, **kwargs):
+        return 0
+
+    monkeypatch.setattr("app.services.user_service.document_exists", fake_document_exists)
+    monkeypatch.setattr("app.services.user_service.count_documents", fake_count_documents)
+
+    async def fake_create_document(col, data):
+        return "id-1"
+
+    async def fake_get_document_by_id(col, did):
+        return {
+            "_id": did,
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "role": "admin",
+            "is_active": True,
+            "created_at": "2024-01-01T00:00:00",
+            "updated_at": "2024-01-01T00:00:00",
+        }
+
+    monkeypatch.setattr("app.services.user_service.create_document", fake_create_document)
+    monkeypatch.setattr("app.services.user_service.get_document_by_id", fake_get_document_by_id)
+    monkeypatch.setattr("app.services.user_service.hash_password", lambda password: "hashed")
+
+    from app.services.user_service import create_user
+
+    user = await create_user(
+        col=object(),
+        full_name="Jane Doe",
+        email="jane@example.com",
+        password="SecurePass123",
+    )
+
+    assert user["role"] == "admin"
 
 
 def test_login_returns_error_for_invalid_credentials(client, monkeypatch):

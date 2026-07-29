@@ -1,6 +1,7 @@
 # app/services/gemini package
 from .gemini_service    import GeminiService
 from .response_generator import GeminiResult
+from .adapter           import GeminiAdapter
 from .api_wrapper       import (
     GeminiError,
     GeminiConfigError,

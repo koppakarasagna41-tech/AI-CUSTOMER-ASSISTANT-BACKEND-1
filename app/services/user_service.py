@@ -25,6 +25,7 @@ from app.database.crud    import (
     delete_document_by_id,
     document_exists,
 )
+from app.models.user      import UserRole
 from app.utils.helpers    import utc_now
 
 logger = logging.getLogger(__name__)
@@ -35,10 +36,13 @@ async def create_user(
     full_name: str,
     email:     str,
     password:  str,
-    role:      str = "customer",
+    role:      str = UserRole.CUSTOMER.value,
 ) -> dict:
     """
     Create a new user — hashes the password, checks email uniqueness.
+
+    If no users exist yet, the first registered account is promoted to admin.
+    Otherwise new registrations may be created as a customer or demo agent.
 
     Returns the created user document (without password_hash).
     Raises ConflictError if the email is already registered.
@@ -49,6 +53,17 @@ async def create_user(
             message="An account with this email already exists.",
             error_code="EMAIL_TAKEN",
         )
+
+    existing_users = await count_documents(col)
+    if isinstance(role, UserRole):
+        role = role.value
+    else:
+        role = str(role).lower()
+
+    if existing_users == 0:
+        role = UserRole.ADMIN.value
+    elif role not in {UserRole.CUSTOMER.value, UserRole.AGENT.value}:
+        role = UserRole.CUSTOMER.value
 
     now  = utc_now()
     doc  = {

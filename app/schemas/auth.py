@@ -15,12 +15,16 @@ from app.models.user import UserRole
 # ── Request bodies ────────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
-    full_name: str       = Field(..., min_length=2, max_length=100,
-                                 examples=["Jane Doe"])
-    email:     EmailStr  = Field(..., examples=["jane@example.com"])
-    password:  str       = Field(..., min_length=8, max_length=128,
-                                 examples=["SecurePass123"])
-    role:      UserRole  = UserRole.CUSTOMER
+    full_name: str      = Field(..., min_length=2, max_length=100,
+                                examples=["Jane Doe"])
+    email:     EmailStr = Field(..., examples=["jane@example.com"])
+    password:  str      = Field(..., min_length=8, max_length=128,
+                                examples=["SecurePass123"])
+    role:      UserRole = Field(
+        UserRole.CUSTOMER,
+        description="User role for demo registration. Admin role is reserved for internal use.",
+        examples=["customer", "agent"],
+    )
 
 
 class LoginRequest(BaseModel):
