@@ -62,7 +62,7 @@ class Settings(BaseSettings):
 
     # ── Google Gemini ─────────────────────────────────────────
     GEMINI_API_KEY:        str  = ""
-    GEMINI_MODEL:          str  = "gemini-1.5-flash"
+    GEMINI_MODEL:          str  = "gemini-3.1-flash-lite"
     GEMINI_MAX_TOKENS:     int  = 1024
     GEMINI_TEMPERATURE:    float = 0.7
     GEMINI_TOP_P:          float = 0.95
@@ -95,13 +95,13 @@ class Settings(BaseSettings):
     )
 
     # ── Intent Detection ──────────────────────────────────────
-    INTENT_MODEL:                str   = "gemini-1.5-flash"
+    INTENT_MODEL:                str   = "gemini-3.1-flash-lite"
     INTENT_TEMPERATURE:          float = 0.0    # deterministic classification
     INTENT_TIMEOUT:              int   = 15     # fast — short prompt
     INTENT_CONFIDENCE_THRESHOLD: float = 0.6   # below → fallback to "unknown"
 
     # ── Sentiment Analysis ────────────────────────────────────
-    SENTIMENT_MODEL:                str   = "gemini-1.5-flash"
+    SENTIMENT_MODEL:                str   = "gemini-3.1-flash-lite"
     SENTIMENT_TEMPERATURE:          float = 0.0    # deterministic
     SENTIMENT_TIMEOUT:              int   = 12
     SENTIMENT_CONFIDENCE_THRESHOLD: float = 0.55   # below → neutral fallback

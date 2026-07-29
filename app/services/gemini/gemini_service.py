@@ -105,7 +105,7 @@ class GeminiService:
             )
             return title[:80] if title else _truncate_title(text)
         except Exception as exc:
-            logger.warning("Title generation failed, using fallback: %s", exc)
+            logger.exception("Title generation failed, using fallback.")
             return _truncate_title(text)
 
     @staticmethod
