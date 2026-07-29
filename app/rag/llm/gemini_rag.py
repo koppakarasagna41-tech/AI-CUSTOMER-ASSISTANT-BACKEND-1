@@ -93,7 +93,15 @@ async def generate_rag_answer(
         )
 
     except GeminiError as exc:
-        logger.error("Gemini error in RAG: %s", exc.message)
+        # Log full exception + traceback so it's visible in host logs
+        import traceback
+
+        logger.exception("Gemini Error in RAG: %s", getattr(exc, 'message', None))
+        try:
+            traceback.print_exc()
+        except Exception:
+            pass
+
         return LLMResult(
             answer=_FALLBACK_ANSWER,
             tokens_used=0,

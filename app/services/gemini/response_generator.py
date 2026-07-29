@@ -163,10 +163,24 @@ async def generate_ai_response(
         is_fallback = True
 
     except GeminiError as exc:
-        logger.error(
-            "Gemini error | conversation=%s | code=%s | retryable=%s | %s",
-            conversation_id, exc.error_code, exc.retryable, exc.message,
+        # Log the full exception and traceback so Render (or any host) records
+        # the exact Gemini SDK/adapter error that occurred. Keep returning
+        # the safe fallback message to the user, but ensure the underlying
+        # exception is visible in logs for root-cause analysis.
+        import traceback
+
+        logger.exception(
+            "Gemini Error | conversation=%s | code=%s | retryable=%s | message=%s",
+            conversation_id, getattr(exc, 'error_code', None), getattr(exc, 'retryable', None), getattr(exc, 'message', None),
         )
+        # Also print the traceback to stdout/stderr to increase chance of
+        # being captured by some hosting platforms' log collectors.
+        try:
+            traceback.print_exc()
+        except Exception:
+            # If printing the traceback fails for any reason, ignore silently.
+            pass
+
         ai_text     = PromptManager.error_fallback_message()
         is_fallback = True
 
