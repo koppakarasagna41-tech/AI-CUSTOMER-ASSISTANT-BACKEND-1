@@ -37,6 +37,7 @@ from app.database        import (
 )
 from app.schemas.chat    import ChatRequest, ChatResponse, MessageOut, StartChatRequest
 from app.services.gemini import GeminiService, GeminiResult
+from app.config import settings
 from app.utils.helpers   import generate_conversation_id, utc_now
 
 logger = logging.getLogger(__name__)
@@ -94,10 +95,15 @@ async def start_chat(
     Creates a new conversation and immediately processes the first message
     through Gemini.  Returns the AI's first response.
     """
-    if not GeminiService.is_configured():
+    if not any([
+        settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("your-"),
+        settings.OPENAI_API_KEY,
+        settings.GROQ_API_KEY,
+        settings.DEEPSEEK_API_KEY,
+    ]):
         raise BadRequestError(
-            message="AI service is not configured. Set GEMINI_API_KEY in your environment.",
-            error_code="GEMINI_NOT_CONFIGURED",
+            message="AI service is not configured. Set GEMINI_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, or DEEPSEEK_API_KEY in your environment.",
+            error_code="AI_NOT_CONFIGURED",
         )
 
     now             = utc_now()
@@ -171,10 +177,15 @@ async def send_message(
     Send a follow-up message to an existing conversation and get the AI reply.
     The conversation must belong to the authenticated user.
     """
-    if not GeminiService.is_configured():
+    if not any([
+        settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("your-"),
+        settings.OPENAI_API_KEY,
+        settings.GROQ_API_KEY,
+        settings.DEEPSEEK_API_KEY,
+    ]):
         raise BadRequestError(
-            message="AI service is not configured. Set GEMINI_API_KEY in your environment.",
-            error_code="GEMINI_NOT_CONFIGURED",
+            message="AI service is not configured. Set GEMINI_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, or DEEPSEEK_API_KEY in your environment.",
+            error_code="AI_NOT_CONFIGURED",
         )
 
     # Verify conversation exists

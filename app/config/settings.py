@@ -72,6 +72,32 @@ class Settings(BaseSettings):
     # Request timeout in seconds
     GEMINI_TIMEOUT:        int   = 30
 
+    # ── AI Provider Routing ─────────────────────────────────────
+    AI_PROVIDER: Optional[str] = None
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MAX_TOKENS: int = 1024
+    OPENAI_TEMPERATURE: float = 0.7
+    OPENAI_TOP_P: float = 0.95
+    OPENAI_TOP_K: int = 40
+    OPENAI_TIMEOUT: int = 30
+
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "groq-model"
+    GROQ_MAX_TOKENS: int = 1024
+    GROQ_TEMPERATURE: float = 0.7
+    GROQ_TOP_P: float = 0.95
+    GROQ_TOP_K: int = 40
+    GROQ_TIMEOUT: int = 30
+
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_MODEL: str = "deepseek-model"
+    DEEPSEEK_MAX_TOKENS: int = 1024
+    DEEPSEEK_TEMPERATURE: float = 0.7
+    DEEPSEEK_TOP_P: float = 0.95
+    DEEPSEEK_TOP_K: int = 40
+    DEEPSEEK_TIMEOUT: int = 30
+
     # ── Knowledge Base / ChromaDB ─────────────────────────────
     CHROMA_PERSIST_DIR:          str   = "./chroma_data"
     CHROMA_COLLECTION_NAME:      str   = "knowledge_base_vectors"

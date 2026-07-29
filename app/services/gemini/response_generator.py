@@ -28,11 +28,11 @@ from app.database.crud   import (
     get_documents,
     update_document,
 )
+from app.services.llm    import AIRouter
+from app.services.llm.types import AIError
 from app.utils.helpers   import utc_now
 from .api_wrapper        import (
-    GeminiError,
     GeminiContentFilterError,
-    generate_content_async,
 )
 from .prompt_manager     import PromptManager
 
@@ -128,27 +128,37 @@ async def generate_ai_response(
     if is_first_message:
         system += "\n\n" + PromptManager.first_message_prompt(user_name)
 
-    # ── 5. Call Gemini API ────────────────────────────────────
-    ai_text    = ""
-    tokens     = 0
+    generic_history = [
+        {"role": d.get("role", "user"), "content": d.get("content", "")}
+        for d in history_docs
+    ]
+
+    # ── 5. Call the AI router ─────────────────────────────────
+    ai_text = ""
+    tokens = 0
     is_fallback = False
     model_used = settings.GEMINI_MODEL
 
     try:
-        ai_text, tokens = await generate_content_async(
-            model_name=settings.GEMINI_MODEL,
+        result = await AIRouter().generate(
             system_prompt=system,
-            history=formatted_history,
+            history=generic_history,
             user_message=user_message_text.strip(),
+            model=settings.GEMINI_MODEL,
             max_tokens=settings.GEMINI_MAX_TOKENS,
             temperature=settings.GEMINI_TEMPERATURE,
             top_p=settings.GEMINI_TOP_P,
             top_k=settings.GEMINI_TOP_K,
             timeout=settings.GEMINI_TIMEOUT,
         )
+        ai_text = result.text
+        tokens = result.tokens_used
+        model_used = result.model_used
         logger.info(
-            "Gemini response generated | conversation=%s tokens=%d",
-            conversation_id, tokens,
+            "AI response generated | conversation=%s provider=%s tokens=%d",
+            conversation_id,
+            result.provider,
+            tokens,
         )
 
     except GeminiContentFilterError as exc:
@@ -156,32 +166,25 @@ async def generate_ai_response(
             "Gemini content filter triggered | conversation=%s | %s",
             conversation_id, exc.message,
         )
-        ai_text     = (
+        ai_text = (
             "I'm sorry, I couldn't process that message due to content policy. "
             "Please rephrase your question and I'll be happy to help."
         )
         is_fallback = True
 
-    except GeminiError as exc:
-        # Log the full exception and traceback so Render (or any host) records
-        # the exact Gemini SDK/adapter error that occurred. Keep returning
-        # the safe fallback message to the user, but ensure the underlying
-        # exception is visible in logs for root-cause analysis.
+    except AIError as exc:
         import traceback
 
         logger.exception(
-            "Gemini Error | conversation=%s | code=%s | retryable=%s | message=%s",
+            "AI router error | conversation=%s | code=%s | retryable=%s | message=%s",
             conversation_id, getattr(exc, 'error_code', None), getattr(exc, 'retryable', None), getattr(exc, 'message', None),
         )
-        # Also print the traceback to stdout/stderr to increase chance of
-        # being captured by some hosting platforms' log collectors.
         try:
             traceback.print_exc()
         except Exception:
-            # If printing the traceback fails for any reason, ignore silently.
             pass
 
-        ai_text     = PromptManager.error_fallback_message()
+        ai_text = PromptManager.error_fallback_message()
         is_fallback = True
 
     # ── 6. Save AI reply ──────────────────────────────────────
