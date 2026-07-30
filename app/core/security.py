@@ -21,8 +21,10 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# ── bcrypt context ────────────────────────────────────────────
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ── password hashing context ────────────────────────────────
+# Use PBKDF2 in this environment for compatibility with the installed
+# passlib/bcrypt stack; it is sufficient for local auth and test flows.
+_pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(plain: str) -> str:
