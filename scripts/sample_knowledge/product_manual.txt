@@ -1,0 +1,7 @@
+Product Manual
+
+The Acme Cloud Desk is a productivity device for remote teams. It includes a 27-inch display, wireless keyboard, and built-in webcam. The device connects to Wi-Fi or Ethernet and supports video conferencing applications.
+
+To set up the device, place it on a stable desk, connect the power cable, and turn it on. The first-time setup wizard guides users through Wi-Fi configuration and account sign-in. The device comes with a one-year warranty and includes customer support coverage for hardware defects.
+
+For best performance, keep the device updated with the latest firmware. If the device overheats, disconnect it from power and contact support.
