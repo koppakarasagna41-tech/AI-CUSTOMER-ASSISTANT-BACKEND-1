@@ -16,6 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorCollection
+from pydantic import ValidationError
 
 from app.config            import settings
 from app.core.auth_deps    import get_current_user
@@ -80,7 +81,7 @@ def _coerce_datetime(value: Any) -> datetime | None:
 
 
 def _user_out(doc: dict, fallback_email: str | None = None) -> UserOut:
-    """Map a raw DB dict → UserOut schema."""
+    """Map a raw DB dict → UserOut schema without letting malformed values crash auth."""
     if not isinstance(doc, dict):
         doc = {}
 
@@ -88,11 +89,17 @@ def _user_out(doc: dict, fallback_email: str | None = None) -> UserOut:
     role = doc.get("role") or UserRole.CUSTOMER.value
     if isinstance(role, UserRole):
         role_value = role.value
+    elif isinstance(role, str) and role.lower() in {UserRole.ADMIN.value, UserRole.AGENT.value, UserRole.CUSTOMER.value}:
+        role_value = role.lower()
     else:
-        role_value = str(role).lower()
+        role_value = UserRole.CUSTOMER.value
 
     email = doc.get("email") or doc.get("mail") or fallback_email or "user@example.com"
+    email_value = str(email) if email is not None else "user@example.com"
+
     user_id = doc.get("_id") or doc.get("id")
+    id_value = str(user_id) if user_id is not None else "unknown"
+
     last_login_at = doc.get("last_login_at")
     if isinstance(last_login_at, datetime):
         last_login_value = last_login_at.isoformat()
@@ -101,16 +108,27 @@ def _user_out(doc: dict, fallback_email: str | None = None) -> UserOut:
     else:
         last_login_value = None
 
-    return UserOut(
-        id=str(user_id) if user_id is not None else None,
-        full_name=full_name,
-        email=email,
-        role=role_value,
-        is_active=doc.get("is_active", True),
-        last_login_at=last_login_value,
-        created_at=_coerce_datetime(doc.get("created_at")),
-        updated_at=_coerce_datetime(doc.get("updated_at")),
-    )
+    payload = {
+        "id": id_value,
+        "full_name": str(full_name) if full_name is not None else "User",
+        "email": email_value,
+        "role": role_value,
+        "is_active": bool(doc.get("is_active", True)),
+        "last_login_at": last_login_value,
+        "created_at": _coerce_datetime(doc.get("created_at")),
+        "updated_at": _coerce_datetime(doc.get("updated_at")),
+    }
+
+    try:
+        return UserOut(**payload)
+    except ValidationError:
+        return UserOut(
+            id="unknown",
+            full_name="User",
+            email=fallback_email or "user@example.com",
+            role=UserRole.CUSTOMER,
+            is_active=True,
+        )
 
 
 # ── Endpoints ─────────────────────────────────────────────────
