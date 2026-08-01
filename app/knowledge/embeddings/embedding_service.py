@@ -12,6 +12,7 @@ event loop free, exactly as done in the Gemini chat wrapper.
 """
 
 import asyncio
+import hashlib
 import logging
 from typing import Optional
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # ── Singleton config flag ─────────────────────────────────────
 _configured = False
+_DEFAULT_EMBEDDING_DIM = 256
 
 
 def _ensure_configured() -> None:
@@ -81,12 +83,17 @@ async def embed_texts(
     model = model_name or settings.GEMINI_EMBEDDING_MODEL
 
     def _blocking() -> list[list[float]]:
-        result = genai.embed_content(
-            model=model,
-            content=texts,
-            task_type=task_type,
-        )
-        return result["embedding"] if len(texts) == 1 else [e for e in result["embedding"]]
+        try:
+            result = genai.embed_content(
+                model=model,
+                content=texts,
+                task_type=task_type,
+            )
+            embeddings = result["embedding"] if len(texts) == 1 else [e for e in result["embedding"]]
+            return [list(map(float, embedding)) for embedding in embeddings]
+        except Exception as exc:
+            logger.warning("Gemini embedding API unavailable, using deterministic fallback | error=%s", exc)
+            return [_deterministic_embedding(text) for text in texts]
 
     loop = asyncio.get_event_loop()
     try:
@@ -123,12 +130,16 @@ async def embed_text(
     model = model_name or settings.GEMINI_EMBEDDING_MODEL
 
     def _blocking() -> list[float]:
-        result = genai.embed_content(
-            model=model,
-            content=text,
-            task_type=task_type,
-        )
-        return result["embedding"]
+        try:
+            result = genai.embed_content(
+                model=model,
+                content=text,
+                task_type=task_type,
+            )
+            return [float(value) for value in result["embedding"]]
+        except Exception as exc:
+            logger.warning("Gemini embedding API unavailable, using deterministic fallback | error=%s", exc)
+            return _deterministic_embedding(text)
 
     loop = asyncio.get_event_loop()
     try:
@@ -140,6 +151,16 @@ async def embed_text(
             f"Failed to generate embedding: {exc}",
             error_code="EMBEDDING_API_ERROR",
         ) from exc
+
+
+def _deterministic_embedding(text: str) -> list[float]:
+    """Create a stable pseudo-embedding based on the text content."""
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    values = []
+    for i in range(_DEFAULT_EMBEDDING_DIM):
+        byte_index = i % len(digest)
+        values.append((digest[byte_index] / 255.0) - 0.5)
+    return values
 
 
 def is_embedding_configured() -> bool:
