@@ -48,11 +48,29 @@ class Settings(BaseSettings):
         return self
 
     # ── CORS ──────────────────────────────────────────────────
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = (
+        "http://localhost:3000,"
+        "http://localhost:5173,"
+        "http://localhost:4173,"
+        "http://127.0.0.1:3000,"
+        "http://127.0.0.1:5173,"
+        "http://127.0.0.1:4173"
+    )
+    CORS_ORIGIN_REGEX: str = r"^https://.*\.vercel\.app$"
+    FRONTEND_URL: Optional[str] = None
 
     @property
     def cors_origins_list(self) -> List[str]:
-        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        origins = {o.strip().rstrip("/") for o in self.CORS_ORIGINS.split(",") if o.strip()}
+
+        if self.FRONTEND_URL:
+            origins.add(self.FRONTEND_URL.strip().rstrip("/"))
+
+        return sorted(origins)
+
+    @property
+    def cors_origin_regex(self) -> str:
+        return self.CORS_ORIGIN_REGEX.strip()
 
     # ── JWT / Security ────────────────────────────────────────
     SECRET_KEY:                   str = "change-me-to-a-long-random-secret-key-min-32"

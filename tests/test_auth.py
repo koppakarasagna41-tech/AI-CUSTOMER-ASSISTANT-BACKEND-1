@@ -155,3 +155,17 @@ def test_me_requires_authentication(client):
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 401
     assert response.json()["success"] is False
+
+
+def test_register_allows_localhost_cors_preflight(client):
+    response = client.options(
+        "/api/v1/auth/register",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
