@@ -20,6 +20,10 @@ class UserUpdate(BaseModel):
     is_active:  Optional[bool] = None
 
 
+class PasswordReset(BaseModel):
+    password: str = Field(..., min_length=8, max_length=128)
+
+
 class UserOut(BaseModel):
     id:            str
     full_name:     str

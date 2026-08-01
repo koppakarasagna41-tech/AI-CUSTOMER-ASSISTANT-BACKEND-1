@@ -154,6 +154,159 @@ async def test_admin_can_create_agent_via_admin_agents_endpoint(client, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_admin_can_list_agents(client, monkeypatch, current_user_payload):
+    agent_document = {
+        "_id": "agent-123",
+        "full_name": "Agent Smith",
+        "email": "agent@example.com",
+        "role": "agent",
+        "is_active": True,
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+
+    async def fake_count_documents(*args, **kwargs):
+        return 1
+
+    async def fake_get_documents(*args, **kwargs):
+        return [agent_document]
+
+    monkeypatch.setattr("app.routers.admin_agents.count_documents", fake_count_documents)
+    monkeypatch.setattr("app.routers.admin_agents.get_documents", fake_get_documents)
+    client.app.dependency_overrides[get_current_user] = lambda: {**current_user_payload, "role": "admin"}
+
+    response = client.get("/api/v1/admin/agents?page=1&page_size=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"][0]["email"] == "agent@example.com"
+    assert body["meta"]["total_items"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_can_get_agent(client, monkeypatch, current_user_payload):
+    agent_document = {
+        "_id": "agent-123",
+        "full_name": "Agent Smith",
+        "email": "agent@example.com",
+        "role": "agent",
+        "is_active": True,
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+
+    async def fake_get_document_by_id(*args, **kwargs):
+        return agent_document
+
+    monkeypatch.setattr("app.routers.admin_agents.get_document_by_id", fake_get_document_by_id)
+    client.app.dependency_overrides[get_current_user] = lambda: {**current_user_payload, "role": "admin"}
+
+    response = client.get("/api/v1/admin/agents/agent-123")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["id"] == "agent-123"
+    assert body["data"]["role"] == "agent"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_reset_agent_password(client, monkeypatch, current_user_payload):
+    async def fake_get_document_by_id(*args, **kwargs):
+        return {
+            "_id": "agent-123",
+            "full_name": "Agent Smith",
+            "email": "agent@example.com",
+            "role": "agent",
+            "is_active": True,
+            "created_at": "2024-01-01T00:00:00",
+            "updated_at": "2024-01-01T00:00:00",
+        }
+
+    async def fake_update_document_by_id(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr("app.routers.admin_agents.get_document_by_id", fake_get_document_by_id)
+    monkeypatch.setattr("app.routers.admin_agents.update_document_by_id", fake_update_document_by_id)
+    client.app.dependency_overrides[get_current_user] = lambda: {**current_user_payload, "role": "admin"}
+
+    response = client.post(
+        "/api/v1/admin/agents/agent-123/reset-password",
+        json={"password": "NewTemporaryPass123"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["message"] == "Agent password reset successfully."
+
+
+@pytest.mark.asyncio
+async def test_admin_can_update_agent(client, monkeypatch, current_user_payload):
+    updated_agent = {
+        "_id": "agent-123",
+        "full_name": "Agent Smith Updated",
+        "email": "agent@example.com",
+        "role": "agent",
+        "is_active": False,
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-02T00:00:00",
+    }
+
+    async def fake_update_document_by_id(*args, **kwargs):
+        return True
+
+    async def fake_get_document_by_id(*args, **kwargs):
+        return updated_agent
+
+    monkeypatch.setattr("app.routers.admin_agents.update_document_by_id", fake_update_document_by_id)
+    monkeypatch.setattr("app.routers.admin_agents.get_document_by_id", fake_get_document_by_id)
+    client.app.dependency_overrides[get_current_user] = lambda: {**current_user_payload, "role": "admin"}
+
+    response = client.patch(
+        "/api/v1/admin/agents/agent-123",
+        json={"is_active": False},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["is_active"] is False
+    assert body["data"]["full_name"] == "Agent Smith Updated"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_delete_agent(client, monkeypatch, current_user_payload):
+    agent_document = {
+        "_id": "agent-123",
+        "full_name": "Agent Smith",
+        "email": "agent@example.com",
+        "role": "agent",
+        "is_active": True,
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+
+    async def fake_get_document_by_id(*args, **kwargs):
+        return agent_document
+
+    async def fake_delete_document_by_id(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr("app.routers.admin_agents.get_document_by_id", fake_get_document_by_id)
+    monkeypatch.setattr("app.routers.admin_agents.delete_document_by_id", fake_delete_document_by_id)
+    client.app.dependency_overrides[get_current_user] = lambda: {**current_user_payload, "role": "admin"}
+
+    response = client.delete("/api/v1/admin/agents/agent-123")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["message"] == "Agent deleted."
+
+
+@pytest.mark.asyncio
 async def test_seed_initial_admin_creates_admin_from_env(monkeypatch):
     created = []
 
