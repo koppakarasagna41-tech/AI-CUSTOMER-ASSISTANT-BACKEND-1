@@ -362,6 +362,36 @@ def test_login_falls_back_to_name_when_full_name_missing(client, monkeypatch):
     assert response.json()["data"]["user"]["full_name"] == "Jane Doe"
 
 
+def test_login_handles_legacy_user_doc_with_non_string_timestamps(client, monkeypatch):
+    async def fake_get_user_by_email(*args, **kwargs):
+        return {
+            "_id": "user-123",
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "role": "customer",
+            "is_active": True,
+            "password_hash": "hashed",
+            "created_at": object(),
+            "updated_at": object(),
+        }
+
+    async def fake_update_last_login(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.routers.auth.get_user_by_email", fake_get_user_by_email)
+    monkeypatch.setattr("app.routers.auth.verify_password", lambda *args, **kwargs: True)
+    monkeypatch.setattr("app.routers.auth.update_last_login", fake_update_last_login)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "jane@example.com", "password": "SecurePass123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["data"]["user"]["email"] == "jane@example.com"
+
+
 def test_me_requires_authentication(client):
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 401

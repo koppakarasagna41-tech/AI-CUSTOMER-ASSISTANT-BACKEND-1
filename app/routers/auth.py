@@ -11,6 +11,8 @@ GET  /api/v1/auth/me         — return current authenticated user profile
 """
 
 import logging
+from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -63,6 +65,20 @@ def _build_token_pair(user_id: str, role: str) -> TokenPair:
     )
 
 
+def _coerce_datetime(value: Any) -> datetime | None:
+    """Convert common timestamp values to datetime or return None for malformed input."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
 def _user_out(doc: dict, fallback_email: str | None = None) -> UserOut:
     """Map a raw DB dict → UserOut schema."""
     if not isinstance(doc, dict):
@@ -77,6 +93,13 @@ def _user_out(doc: dict, fallback_email: str | None = None) -> UserOut:
 
     email = doc.get("email") or doc.get("mail") or fallback_email or "user@example.com"
     user_id = doc.get("_id") or doc.get("id")
+    last_login_at = doc.get("last_login_at")
+    if isinstance(last_login_at, datetime):
+        last_login_value = last_login_at.isoformat()
+    elif isinstance(last_login_at, str):
+        last_login_value = last_login_at
+    else:
+        last_login_value = None
 
     return UserOut(
         id=str(user_id) if user_id is not None else None,
@@ -84,9 +107,9 @@ def _user_out(doc: dict, fallback_email: str | None = None) -> UserOut:
         email=email,
         role=role_value,
         is_active=doc.get("is_active", True),
-        last_login_at=doc.get("last_login_at"),
-        created_at=doc.get("created_at"),
-        updated_at=doc.get("updated_at"),
+        last_login_at=last_login_value,
+        created_at=_coerce_datetime(doc.get("created_at")),
+        updated_at=_coerce_datetime(doc.get("updated_at")),
     )
 
 
