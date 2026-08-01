@@ -196,46 +196,53 @@ async def login(
         error_code="INVALID_CREDENTIALS",
     )
 
-    # Fetch full doc (includes password_hash)
-    user = await get_user_by_email(col, payload.email)
-    if user is None or not isinstance(user, dict):
-        raise _INVALID
-
-    if not verify_password(payload.password, user.get("password_hash", "") or ""):
-        raise _INVALID
-
-    if not user.get("is_active", True):
-        raise UnauthorizedError(
-            message="Your account has been deactivated. Contact support.",
-            error_code="ACCOUNT_INACTIVE",
-        )
-
-    user_id = user.get("_id") or user.get("id")
-    if user_id is None:
-        raise UnauthorizedError(
-            message="Your account is missing a valid identifier.",
-            error_code="USER_INVALID",
-        )
-
-    role = user.get("role") or UserRole.CUSTOMER.value
-    tokens = _build_token_pair(user_id=str(user_id), role=str(role).lower())
-
-    # Fire-and-forget timestamp update (don't block the response)
     try:
-        await update_last_login(col, str(user_id))
-    except Exception as exc:  # pragma: no cover - defensive logging path
-        logger.warning("Login timestamp update failed | id=%s | %s", user_id, exc)
+        # Fetch full doc (includes password_hash)
+        user = await get_user_by_email(col, payload.email)
+        if user is None or not isinstance(user, dict):
+            raise _INVALID
 
-    # Strip password before responding
-    user_doc = dict(user)
-    user_doc.pop("password_hash", None)
+        if not verify_password(payload.password, user.get("password_hash", "") or ""):
+            raise _INVALID
 
-    logger.info("User logged in | id=%s email=%s", user_id, user_doc.get("email") or payload.email)
+        if not user.get("is_active", True):
+            raise UnauthorizedError(
+                message="Your account has been deactivated. Contact support.",
+                error_code="ACCOUNT_INACTIVE",
+            )
 
-    return success_response(
-        data=AuthResponse(user=_user_out(user_doc, fallback_email=payload.email), tokens=tokens).model_dump(),
-        message="Login successful.",
-    )
+        user_id = user.get("_id") or user.get("id")
+        if user_id is None:
+            raise UnauthorizedError(
+                message="Your account is missing a valid identifier.",
+                error_code="USER_INVALID",
+            )
+
+        role = user.get("role") or UserRole.CUSTOMER.value
+        tokens = _build_token_pair(user_id=str(user_id), role=str(role).lower())
+
+        # Fire-and-forget timestamp update (don't block the response)
+        try:
+            await update_last_login(col, str(user_id))
+        except Exception as exc:  # pragma: no cover - defensive logging path
+            logger.warning("Login timestamp update failed | id=%s | %s", user_id, exc)
+
+        # Strip password before responding
+        user_doc = dict(user)
+        user_doc.pop("password_hash", None)
+
+        logger.info("User logged in | id=%s email=%s", user_id, user_doc.get("email") or payload.email)
+
+        return success_response(
+            data=AuthResponse(user=_user_out(user_doc, fallback_email=payload.email), tokens=tokens).model_dump(),
+            message="Login successful.",
+        )
+    except Exception as exc:
+        logger.exception("Login handler failed for %s", getattr(payload, "email", None))
+        raise UnauthorizedError(
+            message=f"Authentication failed: {exc}",
+            error_code="LOGIN_FAILED",
+        ) from exc
 
 
 @router.post(
