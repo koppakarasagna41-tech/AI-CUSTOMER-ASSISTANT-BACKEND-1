@@ -220,7 +220,7 @@ async def test_seed_initial_admin_promotes_existing_user_with_matching_email(mon
         return {"_id": "user-99", "email": "koppakarasagna41@gmail.com", "role": "customer"}
 
     async def fake_update_document_by_id(*args, **kwargs):
-        updated.append((args[1], kwargs))
+        updated.append((args[1], args[2]))
         return True
 
     async def fake_get_document_by_id(*args, **kwargs):
@@ -324,6 +324,36 @@ def test_login_returns_error_for_invalid_credentials(client, monkeypatch):
 
     assert response.status_code == 401
     assert response.json()["success"] is False
+
+
+def test_login_falls_back_to_name_when_full_name_missing(client, monkeypatch):
+    async def fake_get_user_by_email(*args, **kwargs):
+        return {
+            "_id": "user-123",
+            "name": "Jane Doe",
+            "email": "jane@example.com",
+            "role": "customer",
+            "is_active": True,
+            "password_hash": "hashed",
+            "created_at": "2024-01-01T00:00:00",
+            "updated_at": "2024-01-01T00:00:00",
+        }
+
+    async def fake_update_last_login(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.routers.auth.get_user_by_email", fake_get_user_by_email)
+    monkeypatch.setattr("app.routers.auth.verify_password", lambda *args, **kwargs: True)
+    monkeypatch.setattr("app.routers.auth.update_last_login", fake_update_last_login)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "jane@example.com", "password": "SecurePass123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["data"]["user"]["full_name"] == "Jane Doe"
 
 
 def test_me_requires_authentication(client):

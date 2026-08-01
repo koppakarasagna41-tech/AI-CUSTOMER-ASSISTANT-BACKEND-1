@@ -96,7 +96,7 @@ async def seed_initial_admin(col: AsyncIOMotorCollection) -> Optional[dict]:
         return None
 
     try:
-        existing_admin = await get_document(col, {"role": UserRole.ADMIN.value})
+        existing_admin = await get_document(col, filter_query={"role": UserRole.ADMIN.value})
     except (AttributeError, TypeError):
         existing_admin = None
 
@@ -108,24 +108,35 @@ async def seed_initial_admin(col: AsyncIOMotorCollection) -> Optional[dict]:
     except (AttributeError, TypeError):
         existing_users = 0
 
-    existing_user = await get_document(col, {"email": email.lower().strip()})
+    try:
+        existing_user = await get_document(col, filter_query={"email": email.lower().strip()})
+    except (AttributeError, TypeError):
+        existing_user = None
+
     if existing_user:
         now = utc_now()
-        updated = await update_document_by_id(
-            col,
-            existing_user["_id"],
-            {
-                "$set": {
-                    "full_name": "System Administrator",
-                    "role": UserRole.ADMIN.value,
-                    "password_hash": hash_password(password),
-                    "is_active": True,
-                    "updated_at": now,
-                }
-            },
-        )
+        try:
+            updated = await update_document_by_id(
+                col,
+                existing_user["_id"],
+                {
+                    "$set": {
+                        "full_name": "System Administrator",
+                        "role": UserRole.ADMIN.value,
+                        "password_hash": hash_password(password),
+                        "is_active": True,
+                        "updated_at": now,
+                    }
+                },
+            )
+        except (AttributeError, TypeError):
+            updated = False
+
         if updated:
-            refreshed = await get_document_by_id(col, existing_user["_id"])
+            try:
+                refreshed = await get_document_by_id(col, existing_user["_id"])
+            except (AttributeError, TypeError):
+                refreshed = None
             logger.info("Initial admin promoted | email=%s", email)
             return _strip_password(refreshed)
 

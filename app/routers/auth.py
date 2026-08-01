@@ -44,6 +44,7 @@ from app.services.user_service import (
     get_user_by_id,
     update_last_login,
 )
+from app.utils.helpers import utc_now
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -64,12 +65,19 @@ def _build_token_pair(user_id: str, role: str) -> TokenPair:
 
 def _user_out(doc: dict) -> UserOut:
     """Map a raw DB dict → UserOut schema."""
+    full_name = doc.get("full_name") or doc.get("name") or doc.get("fullName") or "User"
+    role = doc.get("role") or UserRole.CUSTOMER.value
+    if isinstance(role, UserRole):
+        role_value = role.value
+    else:
+        role_value = str(role).lower()
+
     return UserOut(
-        id=doc["_id"],
-        full_name=doc["full_name"],
+        id=doc.get("_id") or doc.get("id"),
+        full_name=full_name,
         email=doc["email"],
-        role=doc["role"],
-        is_active=doc["is_active"],
+        role=role_value,
+        is_active=doc.get("is_active", True),
         last_login_at=doc.get("last_login_at"),
         created_at=doc.get("created_at"),
         updated_at=doc.get("updated_at"),
