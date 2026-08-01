@@ -14,7 +14,7 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 
 from app.config import settings
 from app.core.exceptions  import ConflictError, NotFoundError
-from app.core.security    import hash_password
+from app.core.security    import hash_password, is_supported_hash
 from app.database.crud    import (
     create_document,
     get_document,
@@ -101,6 +101,31 @@ async def seed_initial_admin(col: AsyncIOMotorCollection) -> Optional[dict]:
         existing_admin = None
 
     if existing_admin:
+        existing_hash = existing_admin.get("password_hash", "")
+        if not is_supported_hash(existing_hash):
+            logger.warning(
+                "Existing admin password hash is invalid or unsupported; repairing with initial admin credentials."
+            )
+            now = utc_now()
+            try:
+                updated = await update_document_by_id(
+                    col,
+                    existing_admin["_id"],
+                    {
+                        "$set": {
+                            "password_hash": hash_password(password),
+                            "updated_at": now,
+                        }
+                    },
+                )
+            except (AttributeError, TypeError):
+                updated = False
+
+            if updated:
+                try:
+                    existing_admin = await get_document_by_id(col, existing_admin["_id"])
+                except (AttributeError, TypeError):
+                    existing_admin = existing_admin
         return existing_admin
 
     try:
@@ -115,19 +140,26 @@ async def seed_initial_admin(col: AsyncIOMotorCollection) -> Optional[dict]:
 
     if existing_user:
         now = utc_now()
+        admin_hash = existing_user.get("password_hash", "")
+        if not is_supported_hash(admin_hash):
+            logger.warning(
+                "Existing admin password hash is invalid or unsupported; repairing with initial admin credentials."
+            )
+
         try:
+            update_payload = {
+                "$set": {
+                    "full_name": "System Administrator",
+                    "role": UserRole.ADMIN.value,
+                    "password_hash": hash_password(password),
+                    "is_active": True,
+                    "updated_at": now,
+                }
+            }
             updated = await update_document_by_id(
                 col,
                 existing_user["_id"],
-                {
-                    "$set": {
-                        "full_name": "System Administrator",
-                        "role": UserRole.ADMIN.value,
-                        "password_hash": hash_password(password),
-                        "is_active": True,
-                        "updated_at": now,
-                    }
-                },
+                update_payload,
             )
         except (AttributeError, TypeError):
             updated = False

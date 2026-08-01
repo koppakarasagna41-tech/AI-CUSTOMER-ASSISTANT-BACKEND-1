@@ -246,6 +246,49 @@ async def test_seed_initial_admin_promotes_existing_user_with_matching_email(mon
 
 
 @pytest.mark.asyncio
+async def test_seed_initial_admin_repairs_invalid_existing_admin_hash(monkeypatch):
+    updated = []
+
+    async def fake_get_document(*args, **kwargs):
+        if kwargs.get("filter_query", {}).get("role") == "admin":
+            return {
+                "_id": "admin-1",
+                "email": "koppakarasagna41@gmail.com",
+                "role": "admin",
+                "password_hash": "not-a-valid-hash",
+            }
+        return None
+
+    async def fake_update_document_by_id(*args, **kwargs):
+        updated.append((args[1], args[2]))
+        return True
+
+    async def fake_get_document_by_id(*args, **kwargs):
+        return {
+            "_id": "admin-1",
+            "email": "koppakarasagna41@gmail.com",
+            "role": "admin",
+            "password_hash": "$2b$12$dummyhashforpytest",
+        }
+
+    monkeypatch.setattr("app.services.user_service.get_document", fake_get_document)
+    monkeypatch.setattr("app.services.user_service.update_document_by_id", fake_update_document_by_id)
+    monkeypatch.setattr("app.services.user_service.get_document_by_id", fake_get_document_by_id)
+    monkeypatch.setattr(
+        "app.services.user_service.settings",
+        SimpleNamespace(INITIAL_ADMIN_EMAIL="koppakarasagna41@gmail.com", INITIAL_ADMIN_PASSWORD="rasagna@A3"),
+    )
+
+    from app.services.user_service import seed_initial_admin
+
+    result = await seed_initial_admin(object())
+
+    assert result["role"] == "admin"
+    assert updated
+    assert verify_password("rasagna@A3", updated[0][1]["$set"]["password_hash"]) is True
+
+
+@pytest.mark.asyncio
 async def test_admin_can_create_agent_via_users_endpoint(client, monkeypatch, current_user_payload):
     created_user = {
         **current_user_payload,

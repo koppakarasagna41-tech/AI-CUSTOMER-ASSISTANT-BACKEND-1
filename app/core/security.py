@@ -22,9 +22,9 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # ── password hashing context ────────────────────────────────
-# Use PBKDF2 in this environment for compatibility with the installed
-# passlib/bcrypt stack; it is sufficient for local auth and test flows.
-_pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+# Use bcrypt as the primary hash scheme. Existing pbkdf2_sha256 hashes are
+# still accepted for verification during a rolling upgrade.
+_pwd_context = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(plain: str) -> str:
@@ -47,6 +47,17 @@ def verify_password(plain: str, hashed: str) -> bool:
     try:
         return _pwd_context.verify(normalized, hashed)
     except Exception:  # pragma: no cover - defensive for malformed hashes
+        return False
+
+
+def is_supported_hash(hashed: str) -> bool:
+    """Return True when the stored hash format is recognized by the context."""
+    if not hashed:
+        return False
+
+    try:
+        return _pwd_context.identify(hashed) is not None
+    except Exception:
         return False
 
 
