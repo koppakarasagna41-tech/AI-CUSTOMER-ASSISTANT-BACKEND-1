@@ -63,8 +63,11 @@ def _build_token_pair(user_id: str, role: str) -> TokenPair:
     )
 
 
-def _user_out(doc: dict) -> UserOut:
+def _user_out(doc: dict, fallback_email: str | None = None) -> UserOut:
     """Map a raw DB dict → UserOut schema."""
+    if not isinstance(doc, dict):
+        doc = {}
+
     full_name = doc.get("full_name") or doc.get("name") or doc.get("fullName") or "User"
     role = doc.get("role") or UserRole.CUSTOMER.value
     if isinstance(role, UserRole):
@@ -72,10 +75,13 @@ def _user_out(doc: dict) -> UserOut:
     else:
         role_value = str(role).lower()
 
+    email = doc.get("email") or doc.get("mail") or fallback_email or "user@example.com"
+    user_id = doc.get("_id") or doc.get("id")
+
     return UserOut(
-        id=doc.get("_id") or doc.get("id"),
+        id=str(user_id) if user_id is not None else None,
         full_name=full_name,
-        email=doc["email"],
+        email=email,
         role=role_value,
         is_active=doc.get("is_active", True),
         last_login_at=doc.get("last_login_at"),
@@ -151,7 +157,7 @@ async def login(
 
     # Fetch full doc (includes password_hash)
     user = await get_user_by_email(col, payload.email)
-    if user is None:
+    if user is None or not isinstance(user, dict):
         raise _INVALID
 
     if not verify_password(payload.password, user.get("password_hash", "") or ""):
@@ -163,19 +169,30 @@ async def login(
             error_code="ACCOUNT_INACTIVE",
         )
 
-    user_id = user["_id"]
-    tokens  = _build_token_pair(user_id=user_id, role=user["role"])
+    user_id = user.get("_id") or user.get("id")
+    if user_id is None:
+        raise UnauthorizedError(
+            message="Your account is missing a valid identifier.",
+            error_code="USER_INVALID",
+        )
+
+    role = user.get("role") or UserRole.CUSTOMER.value
+    tokens = _build_token_pair(user_id=str(user_id), role=str(role).lower())
 
     # Fire-and-forget timestamp update (don't block the response)
-    await update_last_login(col, user_id)
+    try:
+        await update_last_login(col, str(user_id))
+    except Exception as exc:  # pragma: no cover - defensive logging path
+        logger.warning("Login timestamp update failed | id=%s | %s", user_id, exc)
 
     # Strip password before responding
-    user.pop("password_hash", None)
+    user_doc = dict(user)
+    user_doc.pop("password_hash", None)
 
-    logger.info("User logged in | id=%s email=%s", user_id, user["email"])
+    logger.info("User logged in | id=%s email=%s", user_id, user_doc.get("email") or payload.email)
 
     return success_response(
-        data=AuthResponse(user=_user_out(user), tokens=tokens).model_dump(),
+        data=AuthResponse(user=_user_out(user_doc, fallback_email=payload.email), tokens=tokens).model_dump(),
         message="Login successful.",
     )
 
