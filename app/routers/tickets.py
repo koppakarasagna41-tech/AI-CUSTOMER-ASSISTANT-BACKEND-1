@@ -24,6 +24,7 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.responses  import success_response, paginated_response
 from app.database        import TicketsCollection
 from app.models.ticket   import TicketCategory, TicketPriority, TicketStatus
+from app.models.user     import UserRole
 from app.schemas.ticket  import (
     ClassificationDetail,
     TicketCreate, TicketOut, TicketUpdate,
@@ -82,8 +83,13 @@ async def create_ticket_endpoint(
     if not payload.subject.strip():
         raise BadRequestError("Subject cannot be empty.", error_code="EMPTY_SUBJECT")
 
-    # Use the authenticated user's ID if user_id not explicitly provided
-    user_id = payload.user_id or current_user.get("_id")
+    if payload.user_id and current_user.get("role") != UserRole.ADMIN.value:
+        raise BadRequestError(
+            "Only administrators may create tickets for other users.",
+            error_code="INVALID_USER_ID",
+        )
+
+    user_id = payload.user_id if payload.user_id and current_user.get("role") == UserRole.ADMIN.value else current_user.get("_id")
 
     doc = await create_ticket(
         col=col,
