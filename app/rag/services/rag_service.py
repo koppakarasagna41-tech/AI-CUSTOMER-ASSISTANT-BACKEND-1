@@ -103,7 +103,9 @@ async def run_rag_pipeline(
 
     # ── Step 1: Embed the query ───────────────────────────────
     try:
+        logger.info("RAG query start | conversation_id=%s question=%s top_k=%d", conv_id, question, k)
         query_vector = await embed_query(question)
+        logger.info("Query embedding generated | conversation_id=%s dims=%d", conv_id, len(query_vector))
     except EmbeddingError as exc:
         logger.error("Query embedding failed: %s", exc.message)
         return RAGPipelineResult(
@@ -126,6 +128,7 @@ async def run_rag_pipeline(
         query_vector=query_vector,
         top_k=k,
     )
+    logger.info("Retrieval complete | conversation_id=%s chunk_count=%d", conv_id, len(chunks))
 
     # ── Step 3: Confidence score ──────────────────────────────
     conf = calculate_confidence(chunks=chunks, top_k=k)
@@ -182,7 +185,12 @@ async def run_rag_pipeline(
         )
 
     # ── Step 4b: HIGH confidence → generate answer ───────────
+    logger.info("Generating RAG answer | conversation_id=%s chunk_count=%d", conv_id, len(chunks))
     llm_result = await generate_rag_answer(question=question, chunks=chunks)
+    logger.info(
+        "LLM response generated | conversation_id=%s provider=%s tokens=%d answer_preview=%s",
+        conv_id, llm_result.model_used, llm_result.tokens_used, (llm_result.answer[:180] if llm_result.answer else "")
+    )
 
     # Build source list for response
     sources = [
@@ -297,7 +305,12 @@ async def run_ask_pipeline(
             response_time_ms=_elapsed(start_ms),
         )
 
+    logger.info("Generating single-shot RAG answer | question=%s chunk_count=%d", question, len(chunks))
     llm = await generate_rag_answer(question=question, chunks=chunks)
+    logger.info(
+        "Single-shot LLM response | provider=%s tokens=%d answer_preview=%s",
+        llm.model_used, llm.tokens_used, (llm.answer[:180] if llm.answer else "")
+    )
     sources = [
         {
             "chunk_id":       c.chunk_id,

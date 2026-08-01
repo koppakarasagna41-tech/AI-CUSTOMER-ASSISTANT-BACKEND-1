@@ -228,10 +228,20 @@ async def _run_pipeline(
     try:
         await update_document_status(docs_col, document_id, DocumentStatus.PROCESSING)
 
+        logger.info(
+            "Upload pipeline start | document_id=%s filename=%s doc_type=%s category=%s",
+            document_id, original_name, doc_type.value if hasattr(doc_type, 'value') else str(doc_type), category,
+        )
+
         # 1. Parse
         loop  = asyncio.get_event_loop()
         pages = await loop.run_in_executor(
             None, lambda: _parse_file(file_path, doc_type)
+        )
+
+        logger.info(
+            "Parsed document | document_id=%s pages=%d chars=%d",
+            document_id, len(pages), sum(len(page.text or "") for page in pages),
         )
 
         await _process_pages(
@@ -246,6 +256,8 @@ async def _run_pipeline(
             docs_col=docs_col,
             chunks_col=chunks_col,
         )
+
+        logger.info("Upload pipeline completed | document_id=%s", document_id)
 
     except Exception as exc:
         logger.error("Pipeline failed | document_id=%s | %s", document_id, exc)
@@ -317,6 +329,13 @@ async def _process_pages(
         category=category,
         uploaded_by=uploaded_by,
         uploaded_at=uploaded_at,
+    )
+
+    logger.info(
+        "Chunk creation completed | document_id=%s chunk_count=%d chunk_sizes=%s",
+        document_id,
+        len(chunks),
+        [chunk.char_count for chunk in chunks[:10]],
     )
 
     if not chunks:

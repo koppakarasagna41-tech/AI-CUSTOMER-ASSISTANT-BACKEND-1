@@ -10,7 +10,7 @@ class QueryRequest(BaseModel):
     Full RAG query — creates a new conversation or continues an existing one.
     """
     question:        str           = Field(
-        ..., min_length=3, max_length=2000,
+        ..., min_length=1, max_length=2000,
         examples=["How do I reset my password?"]
     )
     conversation_id: Optional[str] = Field(
@@ -30,7 +30,7 @@ class AskRequest(BaseModel):
     Useful for quick lookups or testing.
     """
     question: str = Field(
-        ..., min_length=3, max_length=2000,
+        ..., min_length=1, max_length=2000,
         examples=["What is your refund policy?"]
     )
     top_k:    Optional[int] = Field(

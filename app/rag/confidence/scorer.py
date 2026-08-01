@@ -83,6 +83,10 @@ def calculate_confidence(
         score, top_sim, avg_sim, coverage, thresh,
         "PASS" if is_confident else "ESCALATE",
     )
+    logger.info(
+        "Confidence breakdown | top_sim=%.4f avg_sim=%.4f coverage=%.4f score=%.4f threshold=%.4f confident=%s",
+        top_sim, avg_sim, coverage, score, thresh, is_confident,
+    )
 
     return ConfidenceResult(
         score=score,

@@ -88,9 +88,18 @@ async def similarity_search(
         metadatas  = results.get("metadatas",  [[]])[0]
         distances  = results.get("distances",  [[]])[0]
 
+        logger.info(
+            "Retrieval results | query_vector_dims=%d top_k=%d count=%d",
+            len(query_vector), top_k, len(ids),
+        )
+
         for cid, doc, meta, dist in zip(ids, documents, metadatas, distances):
             # Convert cosine distance → similarity (ChromaDB cosine dist ∈ [0,2])
             similarity = max(0.0, 1.0 - (float(dist) / 2.0))
+            logger.info(
+                "Retrieved chunk | chunk_id=%s document_id=%s similarity=%.4f page=%s filename=%s",
+                cid, meta.get("document_id", ""), similarity, meta.get("page_number", ""), meta.get("filename", ""),
+            )
             chunks.append(RetrievedChunk(
                 chunk_id=cid,
                 document_id=meta.get("document_id", ""),
