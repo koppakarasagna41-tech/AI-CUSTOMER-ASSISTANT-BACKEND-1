@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from app.core.auth_deps import get_current_user
 
@@ -148,6 +150,98 @@ async def test_admin_can_create_agent_via_admin_agents_endpoint(client, monkeypa
     assert body["success"] is True
     assert body["data"]["email"] == "agent@example.com"
     assert body["data"]["role"] == "agent"
+
+
+@pytest.mark.asyncio
+async def test_seed_initial_admin_creates_admin_from_env(monkeypatch):
+    created = []
+
+    async def fake_count_documents(*args, **kwargs):
+        return 0
+
+    async def fake_create_user(*args, **kwargs):
+        created.append(kwargs)
+        return {"_id": "admin-1", "role": "admin", "email": kwargs["email"]}
+
+    monkeypatch.setattr("app.services.user_service.count_documents", fake_count_documents)
+    monkeypatch.setattr("app.services.user_service.create_user", fake_create_user)
+    monkeypatch.setattr(
+        "app.services.user_service.settings",
+        SimpleNamespace(INITIAL_ADMIN_EMAIL="koppakarasagna41@gmail.com", INITIAL_ADMIN_PASSWORD="rasagna@A3"),
+    )
+
+    from app.services.user_service import seed_initial_admin
+
+    result = await seed_initial_admin(object())
+
+    assert result["role"] == "admin"
+    assert created[0]["role"] == "admin"
+    assert created[0]["email"] == "koppakarasagna41@gmail.com"
+
+
+@pytest.mark.asyncio
+async def test_seed_initial_admin_creates_admin_when_other_users_exist(monkeypatch):
+    created = []
+
+    async def fake_get_document(*args, **kwargs):
+        return None
+
+    async def fake_count_documents(*args, **kwargs):
+        return 3
+
+    async def fake_create_user(*args, **kwargs):
+        created.append(kwargs)
+        return {"_id": "admin-2", "role": "admin", "email": kwargs["email"]}
+
+    monkeypatch.setattr("app.services.user_service.get_document", fake_get_document)
+    monkeypatch.setattr("app.services.user_service.count_documents", fake_count_documents)
+    monkeypatch.setattr("app.services.user_service.create_user", fake_create_user)
+    monkeypatch.setattr(
+        "app.services.user_service.settings",
+        SimpleNamespace(INITIAL_ADMIN_EMAIL="koppakarasagna41@gmail.com", INITIAL_ADMIN_PASSWORD="rasagna@A3"),
+    )
+
+    from app.services.user_service import seed_initial_admin
+
+    result = await seed_initial_admin(object())
+
+    assert result["role"] == "admin"
+    assert created[0]["role"] == "admin"
+    assert created[0]["email"] == "koppakarasagna41@gmail.com"
+
+
+@pytest.mark.asyncio
+async def test_seed_initial_admin_promotes_existing_user_with_matching_email(monkeypatch):
+    updated = []
+
+    async def fake_get_document(*args, **kwargs):
+        if kwargs.get("filter_query", {}).get("role") == "admin":
+            return None
+        return {"_id": "user-99", "email": "koppakarasagna41@gmail.com", "role": "customer"}
+
+    async def fake_update_document_by_id(*args, **kwargs):
+        updated.append((args[1], kwargs))
+        return True
+
+    async def fake_get_document_by_id(*args, **kwargs):
+        return {"_id": "user-99", "email": "koppakarasagna41@gmail.com", "role": "admin", "is_active": True}
+
+    monkeypatch.setattr("app.services.user_service.get_document", fake_get_document)
+    monkeypatch.setattr("app.services.user_service.update_document_by_id", fake_update_document_by_id)
+    monkeypatch.setattr("app.services.user_service.get_document_by_id", fake_get_document_by_id)
+    monkeypatch.setattr("app.services.user_service.hash_password", lambda password: "hashed")
+    monkeypatch.setattr(
+        "app.services.user_service.settings",
+        SimpleNamespace(INITIAL_ADMIN_EMAIL="koppakarasagna41@gmail.com", INITIAL_ADMIN_PASSWORD="rasagna@A3"),
+    )
+
+    from app.services.user_service import seed_initial_admin
+
+    result = await seed_initial_admin(object())
+
+    assert result["role"] == "admin"
+    assert updated[0][0] == "user-99"
+    assert updated[0][1]["$set"]["role"] == "admin"
 
 
 @pytest.mark.asyncio

@@ -34,6 +34,7 @@ from app.routers.auth          import router as auth_router
 from app.routers.users         import router as users_router
 from app.routers.admin_agents  import router as admin_agents_router
 from app.routers.conversations import router as conversations_router
+from app.services import user_service
 from app.routers.messages      import router as messages_router
 from app.routers.tickets       import router as tickets_router
 from app.routers.chat          import router as chat_router
@@ -60,6 +61,12 @@ async def lifespan(app: FastAPI):
 
     try:
         await connect_to_mongo()
+        db = app.state.db if hasattr(app.state, "db") else None
+        if db is None:
+            from app.database import get_database
+            db = get_database()
+        if db is not None:
+            await user_service.seed_initial_admin(db["users"])
         logger.info("Application startup complete.")
     except Exception as exc:  # pragma: no cover - defensive startup path
         logger.warning("Application started without a reachable database: %s", exc)

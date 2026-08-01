@@ -12,6 +12,7 @@ from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 
+from app.config import settings
 from app.core.exceptions  import ConflictError, NotFoundError
 from app.core.security    import hash_password
 from app.database.crud    import (
@@ -62,6 +63,8 @@ async def create_user(
 
     if existing_users == 0:
         role = UserRole.ADMIN.value
+    elif role == UserRole.ADMIN.value:
+        role = UserRole.ADMIN.value
     elif role not in {UserRole.CUSTOMER.value, UserRole.AGENT.value}:
         role = UserRole.CUSTOMER.value
 
@@ -83,6 +86,58 @@ async def create_user(
     # Return without the password_hash
     created = await get_document_by_id(col, inserted_id)
     return _strip_password(created)
+
+
+async def seed_initial_admin(col: AsyncIOMotorCollection) -> Optional[dict]:
+    """Create the first admin account from environment-based seed credentials when needed."""
+    email = getattr(settings, "INITIAL_ADMIN_EMAIL", "") or None
+    password = getattr(settings, "INITIAL_ADMIN_PASSWORD", "") or None
+    if not email or not password:
+        return None
+
+    try:
+        existing_admin = await get_document(col, {"role": UserRole.ADMIN.value})
+    except (AttributeError, TypeError):
+        existing_admin = None
+
+    if existing_admin:
+        return existing_admin
+
+    try:
+        existing_users = await count_documents(col)
+    except (AttributeError, TypeError):
+        existing_users = 0
+
+    existing_user = await get_document(col, {"email": email.lower().strip()})
+    if existing_user:
+        now = utc_now()
+        updated = await update_document_by_id(
+            col,
+            existing_user["_id"],
+            {
+                "$set": {
+                    "full_name": "System Administrator",
+                    "role": UserRole.ADMIN.value,
+                    "password_hash": hash_password(password),
+                    "is_active": True,
+                    "updated_at": now,
+                }
+            },
+        )
+        if updated:
+            refreshed = await get_document_by_id(col, existing_user["_id"])
+            logger.info("Initial admin promoted | email=%s", email)
+            return _strip_password(refreshed)
+
+    created = await create_user(
+        col=col,
+        full_name="System Administrator",
+        email=email,
+        password=password,
+        role=UserRole.ADMIN.value,
+    )
+    logger.info("Initial admin seeded | email=%s", email)
+    return created
 
 
 async def get_user_by_email(
