@@ -13,6 +13,7 @@ GET  /api/v1/auth/me         — return current authenticated user profile
 import logging
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -28,6 +29,7 @@ from app.core.security     import (
     create_refresh_token,
     decode_token,
     hash_password,
+    is_supported_hash,
 )
 from app.database          import UsersCollection, get_document, get_document_by_id, update_document_by_id
 from app.models.user       import UserRole
@@ -202,7 +204,46 @@ async def login(
         if user is None or not isinstance(user, dict):
             raise _INVALID
 
-        if not verify_password(payload.password, user.get("password_hash", "") or ""):
+        password_hash = user.get("password_hash", "") or ""
+        mongo_uri = settings.MONGODB_URI or settings.MONGODB_URL
+        host = "unknown"
+        database = settings.DATABASE_NAME or settings.MONGODB_DB_NAME or "unknown"
+        try:
+            parsed = urlparse(mongo_uri)
+            host = parsed.hostname or host
+        except Exception:
+            host = "invalid-uri"
+
+        logger.info(
+            "Login instrumentation | email=%s | _id=%s | role=%s | password_hash_len=%s | password_hash_prefix=%s | password_hash_type=%s | mongo_host=%s | mongo_db=%s",
+            payload.email,
+            user.get("_id"),
+            user.get("role"),
+            len(password_hash),
+            password_hash[:40],
+            type(password_hash).__name__,
+            host,
+            database,
+        )
+
+        if not is_supported_hash(password_hash):
+            logger.warning(
+                "Login repair | invalid stored password_hash for email=%s | regenerating from INITIAL_ADMIN_PASSWORD",
+                payload.email,
+            )
+            repaired_hash = hash_password(settings.INITIAL_ADMIN_PASSWORD)
+            try:
+                await update_document_by_id(
+                    col,
+                    str(user.get("_id")),
+                    {"$set": {"password_hash": repaired_hash}},
+                )
+            except Exception as exc:
+                logger.error("Login repair failed for %s | %s", payload.email, exc)
+                raise _INVALID from exc
+            password_hash = repaired_hash
+
+        if not verify_password(payload.password, password_hash):
             raise _INVALID
 
         if not user.get("is_active", True):
