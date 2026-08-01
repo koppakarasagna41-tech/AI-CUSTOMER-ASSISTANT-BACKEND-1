@@ -96,9 +96,9 @@ async def register(
     - Returns an access token + refresh token immediately (no separate login needed).
     """
     requested_role = payload.role or UserRole.CUSTOMER
-    if requested_role == UserRole.ADMIN:
+    if requested_role in {UserRole.ADMIN, UserRole.AGENT}:
         raise BadRequestError(
-            message="Admin role may not be assigned during registration.",
+            message="Agent accounts must be created by an administrator." if requested_role == UserRole.AGENT else "Admin role may not be assigned during registration.",
             error_code="INVALID_ROLE",
         )
 
