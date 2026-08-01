@@ -37,10 +37,17 @@ def hash_password(plain: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if plain matches the stored hash."""
+    if not hashed:
+        return False
+
     normalized = plain.strip()
     if len(normalized.encode("utf-8")) > 72:
         normalized = normalized[:72]
-    return _pwd_context.verify(normalized, hashed)
+
+    try:
+        return _pwd_context.verify(normalized, hashed)
+    except Exception:  # pragma: no cover - defensive for malformed hashes
+        return False
 
 
 # ── JWT ───────────────────────────────────────────────────────

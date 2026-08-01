@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from app.core.auth_deps import get_current_user
+from app.core.security import verify_password
 
 
 @pytest.mark.asyncio
@@ -324,6 +325,11 @@ def test_login_returns_error_for_invalid_credentials(client, monkeypatch):
 
     assert response.status_code == 401
     assert response.json()["success"] is False
+
+
+def test_verify_password_handles_invalid_hashes():
+    assert verify_password("password", "not-a-valid-hash") is False
+    assert verify_password("password", "") is False
 
 
 def test_login_falls_back_to_name_when_full_name_missing(client, monkeypatch):
