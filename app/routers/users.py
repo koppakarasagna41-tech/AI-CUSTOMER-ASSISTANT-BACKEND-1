@@ -15,6 +15,7 @@ from pymongo import DESCENDING
 from app.core.auth_deps  import require_admin
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.responses  import success_response, paginated_response
+from app.core.security   import hash_password
 from app.database        import (
     UsersCollection,
     get_document_by_id,
@@ -107,6 +108,31 @@ async def get_user(
         data=UserOut(**{**doc, "id": doc["_id"]}).model_dump(),
         message="User retrieved.",
     )
+
+
+@router.post(
+    "/{user_id}/reset-password",
+    summary="Reset a user's password [admin]",
+)
+async def reset_password(
+    user_id: str,
+    payload: dict,
+    col: AsyncIOMotorCollection = Depends(UsersCollection),
+    _: dict = Depends(require_admin),
+):
+    password = payload.get("password")
+    if not password or len(password) < 8:
+        raise BadRequestError(message="Password must be at least 8 characters long.", error_code="INVALID_PASSWORD")
+
+    updated = await update_document_by_id(
+        col,
+        user_id,
+        {"$set": {"password_hash": hash_password(password), "updated_at": utc_now()}},
+    )
+    if not updated:
+        raise NotFoundError("User not found.", error_code="USER_NOT_FOUND")
+
+    return success_response(message="Password reset successfully.")
 
 
 @router.patch(

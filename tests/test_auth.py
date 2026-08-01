@@ -150,6 +150,35 @@ async def test_admin_can_create_agent_via_users_endpoint(client, monkeypatch, cu
     assert body["data"]["role"] == "agent"
 
 
+@pytest.mark.asyncio
+async def test_admin_can_reset_agent_password(client, monkeypatch, current_user_payload):
+    async def fake_update_document_by_id(*args, **kwargs):
+        return True
+
+    async def fake_get_user_by_id(*args, **kwargs):
+        return {
+            "_id": "user-456",
+            "full_name": "Agent Smith",
+            "email": "agent@example.com",
+            "role": "agent",
+            "is_active": True,
+            "created_at": "2024-01-01T00:00:00",
+            "updated_at": "2024-01-01T00:00:00",
+        }
+
+    monkeypatch.setattr("app.routers.users.update_document_by_id", fake_update_document_by_id)
+    monkeypatch.setattr("app.routers.users.user_service.get_user_by_id", fake_get_user_by_id)
+    client.app.dependency_overrides[get_current_user] = lambda: {**current_user_payload, "role": "admin"}
+
+    response = client.post(
+        "/api/v1/users/user-456/reset-password",
+        json={"password": "NewTemporaryPass123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+
 def test_login_returns_error_for_invalid_credentials(client, monkeypatch):
     async def fake_get_user_by_email(*args, **kwargs):
         return None
