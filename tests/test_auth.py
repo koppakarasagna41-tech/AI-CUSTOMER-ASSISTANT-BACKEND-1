@@ -113,6 +113,44 @@ async def test_create_user_promotes_first_user_to_admin(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_admin_can_create_agent_via_admin_agents_endpoint(client, monkeypatch, current_user_payload):
+    created_user = {
+        **current_user_payload,
+        "_id": "user-456",
+        "full_name": "Agent Smith",
+        "email": "agent@example.com",
+        "role": "agent",
+        "password_hash": "hashed",
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+
+    async def fake_create_user(*args, **kwargs):
+        assert kwargs["role"] == "agent"
+        return created_user
+
+    monkeypatch.setattr("app.routers.admin_agents.user_service.create_user", fake_create_user)
+    admin_payload = {**current_user_payload, "role": "admin"}
+    client.app.dependency_overrides[get_current_user] = lambda: admin_payload
+
+    response = client.post(
+        "/api/v1/admin/agents",
+        json={
+            "full_name": "Agent Smith",
+            "email": "agent@example.com",
+            "password": "TemporaryPass123",
+            "role": "agent",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["email"] == "agent@example.com"
+    assert body["data"]["role"] == "agent"
+
+
+@pytest.mark.asyncio
 async def test_admin_can_create_agent_via_users_endpoint(client, monkeypatch, current_user_payload):
     created_user = {
         **current_user_payload,
