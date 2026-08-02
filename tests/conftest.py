@@ -28,6 +28,9 @@ class _DummyCollection:
     def __init__(self, name: str):
         self.name = name
 
+    def aggregate(self, *args, **kwargs):
+        return _DummyCursor([])
+
     async def find_one(self, *args, **kwargs):
         if args:
             query = args[0]

@@ -122,11 +122,11 @@ async def ticket_stats(
     col:          AsyncIOMotorCollection = Depends(TicketsCollection),
 ):
     """
-    Admins see all tickets.
+    Admins and agents see the full ticket universe.
     Customers see only their own.
     """
     role    = current_user.get("role", "customer")
-    user_id = current_user.get("_id") if role != "admin" else None
+    user_id = None if role in {"admin", "agent"} else current_user.get("_id")
 
     stats = await get_ticket_stats(col, user_id=user_id)
 
@@ -255,9 +255,9 @@ async def get_ticket_endpoint(
             error_code="TICKET_NOT_FOUND",
         )
 
-    # Ownership check for non-admins
+    # Ownership check for customers only.
     role = current_user.get("role", "customer")
-    if role != "admin" and doc.get("user_id") != current_user.get("_id"):
+    if role not in {"admin", "agent"} and doc.get("user_id") != current_user.get("_id"):
         raise NotFoundError(
             f"Ticket '{ticket_id}' not found.",
             error_code="TICKET_NOT_FOUND",

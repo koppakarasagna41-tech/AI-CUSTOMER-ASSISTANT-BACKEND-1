@@ -124,6 +124,18 @@ async def require_admin(
     return current_user
 
 
+async def require_agent_or_admin(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Allow users with role='admin' or role='agent'. Raises 403 otherwise."""
+    if current_user.get("role") not in {"admin", "agent"}:
+        raise ForbiddenError(
+            message="Agent or admin access required.",
+            error_code="FORBIDDEN",
+        )
+    return current_user
+
+
 async def require_active_user(
     current_user: dict = Depends(get_current_user),
 ) -> dict:

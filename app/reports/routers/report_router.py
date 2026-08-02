@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.core.auth_deps  import require_admin
+from app.core.auth_deps  import require_agent_or_admin
 from app.core.exceptions import BadRequestError
 from app.core.responses  import success_response
 from app.database        import (
@@ -86,7 +86,7 @@ def _response(content: bytes, filename: str, fmt: str) -> StreamingResponse:
     summary="List all available report types and formats",
 )
 async def list_reports(
-    _: dict = Depends(require_admin),
+    _: dict = Depends(require_agent_or_admin),
 ):
     """Returns all supported report types, formats, and valid period options."""
     return success_response(
@@ -122,12 +122,12 @@ async def list_reports(
 
 @router.get(
     "/analytics",
-    summary="Download Analytics Report as PDF or CSV [admin]",
+    summary="Download Analytics Report as PDF or CSV [admin/agent]",
 )
 async def download_analytics_report(
     period: str = Query("last_30_days", description="Time period for the report"),
     format: str = Query("pdf",          description="pdf | csv"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     conv_col:  AsyncIOMotorCollection = Depends(ConversationsCollection),
     msg_col:   AsyncIOMotorCollection = Depends(MessagesCollection),
     user_col:  AsyncIOMotorCollection = Depends(UsersCollection),
@@ -163,12 +163,12 @@ async def download_analytics_report(
 
 @router.get(
     "/conversations",
-    summary="Download Conversation Report as PDF or CSV [admin]",
+    summary="Download Conversation Report as PDF or CSV [admin/agent]",
 )
 async def download_conversations_report(
     period: str = Query("last_30_days"),
     format: str = Query("pdf", description="pdf | csv"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     conv_col: AsyncIOMotorCollection = Depends(ConversationsCollection),
     msg_col:  AsyncIOMotorCollection = Depends(MessagesCollection),
 ):
@@ -193,12 +193,12 @@ async def download_conversations_report(
 
 @router.get(
     "/tickets",
-    summary="Download Ticket Report as PDF or CSV [admin]",
+    summary="Download Ticket Report as PDF or CSV [admin/agent]",
 )
 async def download_tickets_report(
     period: str = Query("last_30_days"),
     format: str = Query("pdf", description="pdf | csv"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     tix_col: AsyncIOMotorCollection = Depends(TicketsCollection),
 ):
     """

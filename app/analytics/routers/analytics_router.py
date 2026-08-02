@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.core.auth_deps  import require_admin, get_current_user
+from app.core.auth_deps  import require_agent_or_admin, get_current_user
 from app.core.responses  import success_response
 from app.database        import (
     ConversationsCollection,
@@ -67,11 +67,11 @@ def _validate_period(period: str) -> str:
 
 @router.get(
     "/dashboard",
-    summary="Full analytics dashboard — all metrics in one call [admin]",
+    summary="Full analytics dashboard — all metrics in one call [admin/agent]",
 )
 async def dashboard(
     period: str = Query("last_30_days", description="last_7_days | last_30_days | last_90_days | last_12_months | all_time"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     conv_col:  AsyncIOMotorCollection = Depends(ConversationsCollection),
     msg_col:   AsyncIOMotorCollection = Depends(MessagesCollection),
     user_col:  AsyncIOMotorCollection = Depends(UsersCollection),
@@ -107,18 +107,17 @@ async def overview(
     int_col:   AsyncIOMotorCollection = Depends(IntentLogsCollection),
 ):
     """
-    Return overview metrics. Admins receive global metrics; non-admins receive
-    a limited user-scoped overview (avoids returning 403s to the frontend).
+    Return overview metrics. Admins and agents receive global metrics;
+    customers receive a limited user-scoped overview.
     """
-    # Admins get the full, global overview
-    if current_user.get("role") == "admin":
+    if current_user.get("role") in {"admin", "agent"}:
         data = await get_overview_metrics(
             conv_col, msg_col, user_col, tix_col, esc_col, int_col,
             period=_validate_period(period),
         )
         return success_response(data=data.model_dump(), message="Overview metrics retrieved.")
 
-    # Non-admin: compute a minimal, user-scoped overview to keep the dashboard working
+    # Customers: compute a minimal, user-scoped overview to keep the dashboard working
     start = _validate_period(period)
     # Use same period start logic as services; replicate minimal behavior
     from app.analytics.services.analytics_service import _period_start, _prev_period_start
@@ -158,10 +157,10 @@ async def overview(
 
 # ── GET /analytics/charts/daily ───────────────────────────────
 
-@router.get("/charts/daily", summary="Daily conversations/messages/tickets chart [admin]")
+@router.get("/charts/daily", summary="Daily conversations/messages/tickets chart [admin/agent]")
 async def daily_chart(
     days: int = Query(30, ge=7, le=365, description="Number of days to include"),
-    _:    dict = Depends(require_admin),
+    _:    dict = Depends(require_agent_or_admin),
     conv_col: AsyncIOMotorCollection = Depends(ConversationsCollection),
     msg_col:  AsyncIOMotorCollection = Depends(MessagesCollection),
     tix_col:  AsyncIOMotorCollection = Depends(TicketsCollection),
@@ -172,10 +171,10 @@ async def daily_chart(
 
 # ── GET /analytics/charts/monthly ────────────────────────────
 
-@router.get("/charts/monthly", summary="Monthly conversations/messages/tickets chart [admin]")
+@router.get("/charts/monthly", summary="Monthly conversations/messages/tickets chart [admin/agent]")
 async def monthly_chart(
     months: int = Query(12, ge=1, le=24, description="Number of months to include"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     conv_col: AsyncIOMotorCollection = Depends(ConversationsCollection),
     msg_col:  AsyncIOMotorCollection = Depends(MessagesCollection),
     tix_col:  AsyncIOMotorCollection = Depends(TicketsCollection),
@@ -186,10 +185,10 @@ async def monthly_chart(
 
 # ── GET /analytics/charts/sentiment ──────────────────────────
 
-@router.get("/charts/sentiment", summary="Sentiment distribution chart [admin]")
+@router.get("/charts/sentiment", summary="Sentiment distribution chart [admin/agent]")
 async def sentiment_chart(
     period: str = Query("last_30_days"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     sent_col: AsyncIOMotorCollection = Depends(SentimentLogsCollection),
 ):
     data = await get_sentiment_distribution(sent_col, period=_validate_period(period))
@@ -198,10 +197,10 @@ async def sentiment_chart(
 
 # ── GET /analytics/charts/intents ────────────────────────────
 
-@router.get("/charts/intents", summary="Intent distribution chart [admin]")
+@router.get("/charts/intents", summary="Intent distribution chart [admin/agent]")
 async def intent_chart(
     period: str = Query("last_30_days"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     int_col: AsyncIOMotorCollection = Depends(IntentLogsCollection),
 ):
     data = await get_intent_distribution(int_col, period=_validate_period(period))
@@ -210,10 +209,10 @@ async def intent_chart(
 
 # ── GET /analytics/charts/response-time ──────────────────────
 
-@router.get("/charts/response-time", summary="Average response time trend [admin]")
+@router.get("/charts/response-time", summary="Average response time trend [admin/agent]")
 async def response_time_chart(
     days: int = Query(30, ge=7, le=365),
-    _:    dict = Depends(require_admin),
+    _:    dict = Depends(require_agent_or_admin),
     int_col: AsyncIOMotorCollection = Depends(IntentLogsCollection),
 ):
     data = await get_response_time_chart(int_col, days=days)
@@ -222,10 +221,10 @@ async def response_time_chart(
 
 # ── GET /analytics/tickets ────────────────────────────────────
 
-@router.get("/tickets", summary="Ticket breakdown metrics [admin]")
+@router.get("/tickets", summary="Ticket breakdown metrics [admin/agent]")
 async def ticket_metrics(
     period: str = Query("last_30_days"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     tix_col: AsyncIOMotorCollection = Depends(TicketsCollection),
 ):
     data = await get_ticket_metrics(tix_col, period=_validate_period(period))
@@ -234,10 +233,10 @@ async def ticket_metrics(
 
 # ── GET /analytics/escalations ────────────────────────────────
 
-@router.get("/escalations", summary="Escalation metrics [admin]")
+@router.get("/escalations", summary="Escalation metrics [admin/agent]")
 async def escalation_metrics(
     period: str = Query("last_30_days"),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     esc_col:  AsyncIOMotorCollection = Depends(EscalationEventsCollection),
     conv_col: AsyncIOMotorCollection = Depends(ConversationsCollection),
 ):
@@ -247,12 +246,12 @@ async def escalation_metrics(
 
 # ── GET /analytics/export/conversations ──────────────────────
 
-@router.get("/export/conversations", summary="Export conversations as JSON or CSV [admin]")
+@router.get("/export/conversations", summary="Export conversations as JSON or CSV [admin/agent]")
 async def export_convs(
     period: str = Query("last_30_days"),
     format: str = Query("json",  description="json | csv"),
     limit:  int = Query(5000, ge=1, le=10000),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     conv_col: AsyncIOMotorCollection = Depends(ConversationsCollection),
 ):
     rows = await export_conversations(conv_col, period=_validate_period(period), limit=limit)
@@ -262,12 +261,12 @@ async def export_convs(
 
 # ── GET /analytics/export/tickets ────────────────────────────
 
-@router.get("/export/tickets", summary="Export tickets as JSON or CSV [admin]")
+@router.get("/export/tickets", summary="Export tickets as JSON or CSV [admin/agent]")
 async def export_tix(
     period: str = Query("last_30_days"),
     format: str = Query("json", description="json | csv"),
     limit:  int = Query(5000, ge=1, le=10000),
-    _:      dict = Depends(require_admin),
+    _:      dict = Depends(require_agent_or_admin),
     tix_col: AsyncIOMotorCollection = Depends(TicketsCollection),
 ):
     rows = await export_tickets(tix_col, period=_validate_period(period), limit=limit)

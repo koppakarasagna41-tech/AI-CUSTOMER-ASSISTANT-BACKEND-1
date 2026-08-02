@@ -1,6 +1,6 @@
 import importlib
 
-from app.core.auth_deps import require_admin
+from app.core.auth_deps import require_agent_or_admin
 
 analytics_router_module = importlib.import_module("app.analytics.routers.analytics_router")
 
@@ -17,7 +17,7 @@ def test_dashboard_returns_metrics(client, monkeypatch):
         return FakeMetrics()
 
     monkeypatch.setattr(analytics_router_module, "get_dashboard", fake_dashboard)
-    client.app.dependency_overrides[require_admin] = lambda: {"_id": "admin-1", "role": "admin"}
+    client.app.dependency_overrides[require_agent_or_admin] = lambda: {"_id": "admin-1", "role": "admin"}
 
     response = client.get("/api/v1/analytics/dashboard")
 
@@ -32,7 +32,7 @@ def test_export_tickets_returns_stream(client, monkeypatch):
         return [{"ticket_id": "TKT-1", "subject": "Billing"}]
 
     monkeypatch.setattr(analytics_router_module, "export_tickets", fake_export_tickets)
-    client.app.dependency_overrides[require_admin] = lambda: {"_id": "admin-1", "role": "admin"}
+    client.app.dependency_overrides[require_agent_or_admin] = lambda: {"_id": "admin-1", "role": "admin"}
 
     response = client.get("/api/v1/analytics/export/tickets")
 
